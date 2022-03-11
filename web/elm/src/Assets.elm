@@ -104,7 +104,7 @@ toPath : Asset -> List String
 toPath asset =
     let
         basePath =
-            [ "public", "images" ]
+            [ "submodules", "concourse", "web", "public", "images" ]
     in
     case asset of
         CliIcon cli ->
