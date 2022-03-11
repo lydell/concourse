@@ -4,11 +4,11 @@
     <title>Concourse</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="manifest" href="{{asset "manifest.json"}}" />
-    <link rel="stylesheet" type="text/css" media="all" href="{{asset "main.css"}}" />
-    <link rel="icon" type="image/png" id="favicon" href="{{asset "images/favicon.png"}}" />
-    <script src="{{asset "elm.min.js"}}"></script>
-    <script src="{{asset "clipboard.min.js"}}"></script>
+    <link rel="manifest" href="/public/manifest.json" />
+    <link rel="stylesheet" type="text/css" media="all" href="/public/main.css" />
+    <link rel="icon" type="image/png" id="favicon" href="/public/images/favicon.png" />
+    <script src="/public/elm.min.js"></script>
+    <script src="/public/clipboard.min.js"></script>
     <style>
         @keyframes pipeline-running {
           0% { background-position-x: -53.5px; }
@@ -71,15 +71,14 @@
     <div id="elm-app-embed"></div>
     <script>
       window.elmFlags = {
-        turbulenceImgSrc: {{asset "images/buckleup.svg"}},
-        notFoundImgSrc: {{asset "images/parachute-error-404.svg"}},
-        csrfToken: {{ .CSRFToken }},
-        authToken: {{ .AuthToken }},
+        turbulenceImgSrc: "/public/images/buckleup.svg",
+        notFoundImgSrc: "/public/images/parachute-error-404.svg",
+        csrfToken: "",
+        authToken: "",
         pipelineRunningKeyframes: "pipeline-running",
-        featureFlags: {{ jsonMarshal .FeatureFlags }}
+        featureFlags: {"across_step":true,"build_rerun":false,"cache_streamed_volumes":false,"global_resources":true,"pipeline_instances":true,"redact_secrets":false,"resource_causality":true}
       };
     </script>
-    <script src="{{asset "bundle.js"}}" nomodule></script>
-    <script src="{{asset "elm-setup.js"}}" type="module"></script>
+    <script src="/public/elm-setup.js" type="module"></script>
   </body>
 </html>
