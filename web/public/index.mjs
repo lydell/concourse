@@ -136,7 +136,7 @@ function redrawFunction(svg, jobs, resources, newUrl) {
     var pinIconWidth = 6;
     var pinIconHeight = 9.75;
     nodeLink.filter(function(node) { return node.pinned() }).append("image")
-        .attr("xlink:href", "/submodules/concourse/web/public/images/pin-ic-white.svg")
+        .attr("xlink:href", "/public/images/pin-ic-white.svg")
         .attr("width", pinIconWidth)
         .attr("y", function(node) { return node.height() / 2 - pinIconHeight / 2 })
         .attr("x", function(node) { return node.padding() })
