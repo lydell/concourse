@@ -3217,13 +3217,13 @@ all =
                                 >> Tuple.first
                                 >> Common.queryView
                                 >> Query.find [ id "plan_version" ]
-                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version%3Av3.1.4" ]
+                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version:v3.1.4" ]
                         , test "link uses resource name" <|
                             fetchPlanWithGetStepWithVersion "step" (Just "resource")
                                 >> Tuple.first
                                 >> Common.queryView
                                 >> Query.find [ id "plan_version" ]
-                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/resource?filter=version%3Av3.1.4" ]
+                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/resource?filter=version:v3.1.4" ]
                         , test "anonymous get step has no link" <|
                             fetchPlanWithGetStepWithVersion "step" Nothing
                                 >> Tuple.first
@@ -3231,7 +3231,7 @@ all =
                                 >> Query.find [ id "plan_version" ]
                                 >> Query.hasNot
                                     [ tag "a"
-                                    , attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version%3Av3.1.4"
+                                    , attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version:v3.1.4"
                                     ]
                         ]
                     , describe "put step" <|
@@ -3274,13 +3274,13 @@ all =
                                 >> Tuple.first
                                 >> Common.queryView
                                 >> Query.find [ id "plan_version" ]
-                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version%3Av3.1.4" ]
+                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/step?filter=version:v3.1.4" ]
                         , test "link uses resource name" <|
                             fetchPlanWithPutStepWithVersion "step" (Just "resource")
                                 >> Tuple.first
                                 >> Common.queryView
                                 >> Query.find [ id "plan_version" ]
-                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/resource?filter=version%3Av3.1.4" ]
+                                >> Query.has [ attribute <| Attr.href "/teams/team/pipelines/p/resources/resource?filter=version:v3.1.4" ]
                         ]
                     ]
                 , test "one tick after hovering step state, GetElement fires" <|

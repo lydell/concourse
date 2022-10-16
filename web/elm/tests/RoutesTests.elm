@@ -209,7 +209,7 @@ all =
                         , groups = []
                         }
                     )
-                    |> Expect.equal "/teams/team/pipelines/pipeline?vars.foo.bar.%22baz.qux%22=1&vars.foo.bar.special_chars=%22%2F%5C%22'%26.%22&vars.k=%22s%22"
+                    |> Expect.equal "/teams/team/pipelines/pipeline?vars.foo.bar.\"baz.qux\"=1&vars.foo.bar.special_chars=\"/\\\"'%26.\"&vars.k=\"s\""
         , test "Pipeline route can be parsed properly" <|
             \_ ->
                 ("http://example.com"
@@ -247,7 +247,7 @@ all =
                         )
         , test "Pipeline route can be parsed properly given rooted vars" <|
             \_ ->
-                "http://example.com/teams/team/pipelines/pipeline?vars=%7B%22foo%22%3A%22bar%22%7D"
+                "http://example.com/teams/team/pipelines/pipeline?vars=%7B%22foo%22:%22bar%22%7D"
                     |> Url.fromString
                     |> Maybe.andThen Routes.parsePath
                     |> Expect.equal

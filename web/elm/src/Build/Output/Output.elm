@@ -101,7 +101,7 @@ planAndResourcesFetched buildId ( plan, resources ) model =
         url =
             Endpoints.BuildEventStream
                 |> Endpoints.Build buildId
-                |> Endpoints.toString []
+                |> Endpoints.toString Dict.empty
     in
     ( { model
         | steps =

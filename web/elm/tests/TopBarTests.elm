@@ -814,7 +814,7 @@ all =
                         [ tag "a"
                         , attribute <|
                             Attr.href
-                                "/teams/team/pipelines/pipeline/resources/resource?filter=ver%3A1"
+                                "/teams/team/pipelines/pipeline/resources/resource?filter=ver:1"
                         ]
             , it "last breadcrumb has text overflow and ellipsis" <|
                 Query.find [ id "breadcrumbs" ]

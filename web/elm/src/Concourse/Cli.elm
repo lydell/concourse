@@ -1,7 +1,7 @@
 module Concourse.Cli exposing (Cli(..), clis, downloadUrl, id, label)
 
 import Api.Endpoints as Endpoints
-import Url.Builder
+import Dict
 
 
 clis : List Cli
@@ -31,9 +31,11 @@ downloadUrl cli =
     in
     Endpoints.Cli
         |> Endpoints.toString
-            [ Url.Builder.string "arch" "amd64"
-            , Url.Builder.string "platform" platformName
-            ]
+            (Dict.fromList
+                [ ( "arch", [ "amd64" ] )
+                , ( "platform", [ platformName ] )
+                ]
+            )
 
 
 label : Cli -> String

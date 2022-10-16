@@ -12,18 +12,19 @@ module Api exposing
 
 import Api.Endpoints exposing (Endpoint, toString)
 import Api.Pagination exposing (parsePagination)
+import AppUrl exposing (QueryParameters)
 import Concourse
 import Concourse.Pagination exposing (Page, Paginated)
+import Dict
 import Http
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Task exposing (Task)
-import Url.Builder
 
 
 type alias Request a =
     { endpoint : Endpoint
-    , query : List Url.Builder.QueryParameter
+    , query : QueryParameters
     , method : String
     , headers : List Http.Header
     , body : Http.Body
@@ -50,18 +51,18 @@ get endpoint =
     { method = "GET"
     , headers = []
     , endpoint = endpoint
-    , query = []
+    , query = Dict.empty
     , body = Http.emptyBody
     , expect = ignoreResponse
     }
 
 
-paginatedGet : Endpoint -> Maybe Page -> List Url.Builder.QueryParameter -> Decoder a -> Request (Paginated a)
+paginatedGet : Endpoint -> Maybe Page -> QueryParameters -> Decoder a -> Request (Paginated a)
 paginatedGet endpoint page additionalQueries decoder =
     { method = "GET"
     , headers = []
     , endpoint = endpoint
-    , query = Api.Pagination.params page ++ additionalQueries
+    , query = Dict.union (Api.Pagination.params page) additionalQueries
     , body = Http.emptyBody
     , expect = Http.expectStringResponse (parsePagination decoder)
     }
@@ -72,7 +73,7 @@ post endpoint csrfToken =
     { method = "POST"
     , headers = [ Http.header Concourse.csrfTokenHeaderName csrfToken ]
     , endpoint = endpoint
-    , query = []
+    , query = Dict.empty
     , body = Http.emptyBody
     , expect = ignoreResponse
     }
@@ -83,7 +84,7 @@ put endpoint csrfToken =
     { method = "PUT"
     , headers = [ Http.header Concourse.csrfTokenHeaderName csrfToken ]
     , endpoint = endpoint
-    , query = []
+    , query = Dict.empty
     , body = Http.emptyBody
     , expect = ignoreResponse
     }

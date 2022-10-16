@@ -6,7 +6,6 @@ import Data
 import Dict
 import Expect
 import Test exposing (Test, describe, test)
-import Url.Builder
 
 
 testEndpoints : Test
@@ -14,7 +13,7 @@ testEndpoints =
     describe "ApiEndpoints" <|
         let
             toPath =
-                toString []
+                toString Dict.empty
         in
         [ test "PipelinesList" <|
             \_ ->
@@ -82,7 +81,7 @@ testEndpoints =
                                 )
                         )
                     |> toPath
-                    |> Expect.equal "/api/v1/teams/team/pipelines/pipeline?vars.foo.bar=123&vars.k=%22v%22"
+                    |> Expect.equal "/api/v1/teams/team/pipelines/pipeline?vars.foo.bar=123&vars.k=\"v\""
         , test "JobsList" <|
             \_ ->
                 JobsList
@@ -300,6 +299,6 @@ testToString =
         [ test "adds query params" <|
             \_ ->
                 Logout
-                    |> toString [ Url.Builder.string "hello" "world" ]
+                    |> toString (Dict.singleton "hello" [ "world" ])
                     |> Expect.equal "/sky/logout?hello=world"
         ]

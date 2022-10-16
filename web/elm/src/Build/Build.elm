@@ -269,7 +269,7 @@ handleCallback action ( model, effects ) =
                             { url =
                                 Endpoints.BuildEventStream
                                     |> Endpoints.Build buildId
-                                    |> Endpoints.toString []
+                                    |> Endpoints.toString Dict.empty
                             , eventTypes = [ "end", "event" ]
                             }
                        , SyncStickyBuildLogHeaders

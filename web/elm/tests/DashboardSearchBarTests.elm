@@ -338,7 +338,7 @@ all =
                                     >> Common.queryView
                                     >> Query.find [ id SearchBar.searchInputId ]
                                     >> Query.has [ value "status: pending team:\"team1\"" ]
-                                , Tuple.second >> Common.contains (Effects.ModifyUrl "/?search=status%3A%20pending%20team%3A%22team1%22")
+                                , Tuple.second >> Common.contains (Effects.ModifyUrl "/?search=status:%20pending%20team:\"team1\"")
                                 ]
                     , test "doesn't try to loop if the dropdown is empty (down)" <|
                         focusSearchBar

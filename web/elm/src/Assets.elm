@@ -7,10 +7,10 @@ module Assets exposing
     , toString
     )
 
+import AppUrl exposing (AppUrl)
 import Concourse.BuildStatus exposing (BuildStatus(..))
 import Concourse.Cli exposing (Cli(..))
 import Concourse.PipelineStatus exposing (PipelineStatus(..))
-import Url.Builder
 
 
 type Asset
@@ -85,9 +85,14 @@ type CircleOutlineIcon
     | AbortCircleIcon
 
 
+toAppUrl : Asset -> AppUrl
+toAppUrl =
+    toPath >> AppUrl.fromPath
+
+
 toString : Asset -> String
-toString asset =
-    Url.Builder.absolute (toPath asset) []
+toString =
+    toAppUrl >> AppUrl.toString
 
 
 backgroundImage : Maybe Asset -> String

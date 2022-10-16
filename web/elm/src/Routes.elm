@@ -13,7 +13,6 @@ module Routes exposing
     , parsePath
     , pipelineRoute
     , resourceRoute
-    , searchQueryParams
     , showHighlight
     , toString
     , tokenToFlyRoute
@@ -22,30 +21,14 @@ module Routes exposing
     )
 
 import Api.Pagination
+import AppUrl exposing (AppUrl, QueryParameters)
 import Concourse exposing (InstanceVars, JsonValue(..))
 import Concourse.Pagination as Pagination exposing (Direction(..))
 import Dict exposing (Dict)
 import DotNotation
 import Maybe.Extra
-import RouteBuilder exposing (RouteBuilder, appendPath, appendQuery)
+import RouteBuilder
 import Url
-import Url.Builder as Builder
-import Url.Parser
-    exposing
-        ( (</>)
-        , (<?>)
-        , Parser
-        , custom
-        , fragment
-        , int
-        , map
-        , oneOf
-        , parse
-        , s
-        , string
-        , top
-        )
-import Url.Parser.Query as Query
 
 
 type Route
@@ -70,11 +53,6 @@ type DashboardView
     | ViewAllPipelines
 
 
-dashboardViews : List DashboardView
-dashboardViews =
-    [ ViewNonArchivedPipelines, ViewAllPipelines ]
-
-
 dashboardViewName : DashboardView -> String
 dashboardViewName view =
     case view of
@@ -83,6 +61,19 @@ dashboardViewName view =
 
         ViewNonArchivedPipelines ->
             "non_archived"
+
+
+dashboardViewFromString : String -> Maybe DashboardView
+dashboardViewFromString view =
+    case view of
+        "all" ->
+            Just ViewAllPipelines
+
+        "non_archived" ->
+            Just ViewNonArchivedPipelines
+
+        _ ->
+            Nothing
 
 
 type Highlight
@@ -105,22 +96,33 @@ type alias Transition =
 -- pages
 
 
-pipelineIdentifier : Parser ({ teamName : String, pipelineName : String } -> a) a
-pipelineIdentifier =
-    s "teams"
-        </> string
-        </> s "pipelines"
-        </> string
-        |> map
-            (\t p ->
-                { teamName = t
-                , pipelineName = p
-                }
-            )
+pipelineIdentifier : AppUrl -> ({ teamName : String, pipelineName : String } -> List String -> Maybe a) -> Maybe a
+pipelineIdentifier url f =
+    case url.path of
+        "teams" :: teamName :: "pipelines" :: pipelineName :: rest ->
+            f { teamName = teamName, pipelineName = pipelineName } rest
+
+        _ ->
+            Nothing
 
 
-build : Parser ((InstanceVars -> Route) -> a) a
-build =
+pageFromQueryParameters : QueryParameters -> Maybe Pagination.Page
+pageFromQueryParameters queryParameters =
+    parsePage
+        (getIntParameter "from" queryParameters)
+        (getIntParameter "to" queryParameters)
+        (getIntParameter "limit" queryParameters)
+
+
+getIntParameter : String -> QueryParameters -> Maybe Int
+getIntParameter name queryParameters =
+    Dict.get name queryParameters
+        |> Maybe.andThen List.head
+        |> Maybe.andThen String.toInt
+
+
+build : AppUrl -> Maybe (InstanceVars -> Route)
+build url =
     let
         buildHelper { teamName, pipelineName } jobName buildName h =
             \iv ->
@@ -136,21 +138,25 @@ build =
                     , groups = []
                     }
     in
-    map buildHelper
-        (pipelineIdentifier
-            </> s "jobs"
-            </> string
-            </> s "builds"
-            </> string
-            </> fragment parseHighlight
-        )
+    pipelineIdentifier url <|
+        \identifier rest ->
+            case rest of
+                [ "jobs", jobName, "builds", buildName ] ->
+                    Just (buildHelper identifier jobName buildName (parseHighlight url.fragment))
+
+                _ ->
+                    Nothing
 
 
-oneOffBuild : Parser ((b -> Route) -> a) a
-oneOffBuild =
-    map
-        (\b h -> always <| OneOffBuild { id = b, highlight = h })
-        (s "builds" </> int </> fragment parseHighlight)
+oneOffBuild : AppUrl -> Maybe Route
+oneOffBuild url =
+    case url.path of
+        [ "builds", buildIdString ] ->
+            String.toInt buildIdString
+                |> Maybe.map (\buildId -> OneOffBuild { id = buildId, highlight = parseHighlight url.fragment })
+
+        _ ->
+            Nothing
 
 
 parsePage : Maybe Int -> Maybe Int -> Maybe Int -> Maybe Pagination.Page
@@ -172,10 +178,10 @@ parsePage from to limit =
             Nothing
 
 
-resource : Parser ((InstanceVars -> Route) -> a) a
-resource =
+resource : AppUrl -> Maybe (InstanceVars -> Route)
+resource url =
     let
-        resourceHelper { teamName, pipelineName } resourceName from to limit version =
+        resourceHelper { teamName, pipelineName } resourceName page version =
             \iv ->
                 Resource
                     { id =
@@ -184,24 +190,28 @@ resource =
                         , pipelineInstanceVars = iv
                         , resourceName = resourceName
                         }
-                    , page = parsePage from to limit
+                    , page = page
                     , version = version
                     , groups = []
                     }
     in
-    map resourceHelper
-        (pipelineIdentifier
-            </> s "resources"
-            </> string
-            <?> Query.int "from"
-            <?> Query.int "to"
-            <?> Query.int "limit"
-            <?> resourceVersion "filter"
-        )
+    pipelineIdentifier url <|
+        \identifier rest ->
+            case rest of
+                [ "resources", resourceName ] ->
+                    resourceHelper
+                        identifier
+                        resourceName
+                        (pageFromQueryParameters url.queryParameters)
+                        (resourceVersion url.queryParameters)
+                        |> Just
+
+                _ ->
+                    Nothing
 
 
-resourceVersion : String -> Query.Parser (Maybe Concourse.Version)
-resourceVersion key =
+resourceVersion : QueryParameters -> Maybe Concourse.Version
+resourceVersion queryParameters =
     let
         split s =
             case String.split ":" s of
@@ -221,13 +231,13 @@ resourceVersion key =
             else
                 Just <| parse queries
     in
-    Query.custom key clean
+    Dict.get "filter" queryParameters |> Maybe.andThen clean
 
 
-job : Parser ((InstanceVars -> Route) -> a) a
-job =
+job : AppUrl -> Maybe (InstanceVars -> Route)
+job url =
     let
-        jobHelper { teamName, pipelineName } jobName from to limit =
+        jobHelper { teamName, pipelineName } jobName page =
             \iv ->
                 Job
                     { id =
@@ -236,24 +246,24 @@ job =
                         , pipelineInstanceVars = iv
                         , jobName = jobName
                         }
-                    , page = parsePage from to limit
+                    , page = page
                     , groups = []
                     }
     in
-    map jobHelper
-        (pipelineIdentifier
-            </> s "jobs"
-            </> string
-            <?> Query.int "from"
-            <?> Query.int "to"
-            <?> Query.int "limit"
-        )
+    pipelineIdentifier url <|
+        \identifier rest ->
+            case rest of
+                [ "jobs", jobName ] ->
+                    Just (jobHelper identifier jobName (pageFromQueryParameters url.queryParameters))
+
+                _ ->
+                    Nothing
 
 
-pipeline : Parser ((InstanceVars -> Route) -> a) a
-pipeline =
-    map
-        (\{ teamName, pipelineName } g ->
+pipeline : AppUrl -> Maybe (InstanceVars -> Route)
+pipeline url =
+    let
+        pipelineHelper { teamName, pipelineName } g =
             \iv ->
                 Pipeline
                     { id =
@@ -263,53 +273,67 @@ pipeline =
                         }
                     , groups = g
                     }
-        )
-        (pipelineIdentifier <?> Query.custom "group" identity)
+    in
+    pipelineIdentifier url <|
+        \identifier rest ->
+            case rest of
+                [] ->
+                    Just (pipelineHelper identifier (Dict.get "group" url.queryParameters |> Maybe.withDefault []))
+
+                _ ->
+                    Nothing
 
 
-dashboard : Parser ((b -> Route) -> a) a
-dashboard =
-    map (\st view -> always <| Dashboard { searchType = st, dashboardView = view }) <|
-        oneOf
-            [ (top
-                <?> (stringWithSpaces "search" |> Query.map (Maybe.withDefault ""))
-              )
-                |> map Normal
-            , s "hd" |> map HighDensity
-            ]
-            <?> dashboardViewQuery
-
-
-dashboardViewQuery : Query.Parser DashboardView
-dashboardViewQuery =
-    (Query.enum "view" <|
-        Dict.fromList
-            (dashboardViews
-                |> List.map (\v -> ( dashboardViewName v, v ))
-            )
-    )
-        |> Query.map (Maybe.withDefault ViewNonArchivedPipelines)
-
-
-stringWithSpaces : String -> Query.Parser (Maybe String)
-stringWithSpaces =
-    -- https://github.com/elm/url/issues/32
-    Query.string >> Query.map (Maybe.map (String.replace "+" " "))
-
-
-flySuccess : Parser ((b -> Route) -> a) a
-flySuccess =
-    map (\s p -> always <| FlySuccess (s == Just "true") p)
-        (s "fly_success"
-            <?> Query.string "noop"
-            <?> Query.int "fly_port"
-        )
-
-
-causality : Parser ((InstanceVars -> Route) -> a) a
-causality =
+dashboard : AppUrl -> Maybe Route
+dashboard url =
     let
-        causalityHelper direction { teamName, pipelineName } resourceName versionId =
+        dashboardHelper searchType =
+            Dashboard
+                { searchType = searchType
+                , dashboardView = dashboardViewQuery url.queryParameters
+                }
+    in
+    case url.path of
+        [] ->
+            Dict.get "search" url.queryParameters
+                |> Maybe.andThen List.head
+                |> Maybe.withDefault ""
+                |> Normal
+                |> dashboardHelper
+                |> Just
+
+        [ "hd" ] ->
+            Just (dashboardHelper HighDensity)
+
+        _ ->
+            Nothing
+
+
+dashboardViewQuery : QueryParameters -> DashboardView
+dashboardViewQuery queryParameters =
+    Dict.get "view" queryParameters
+        |> Maybe.andThen List.head
+        |> Maybe.andThen dashboardViewFromString
+        |> Maybe.withDefault ViewNonArchivedPipelines
+
+
+flySuccess : AppUrl -> Maybe Route
+flySuccess url =
+    case url.path of
+        [ "fly_success" ] ->
+            FlySuccess
+                (Dict.get "noop" url.queryParameters |> Maybe.andThen List.head |> (==) (Just "true"))
+                (getIntParameter "fly_port" url.queryParameters)
+                |> Just
+
+        _ ->
+            Nothing
+
+
+causality : AppUrl -> Maybe (InstanceVars -> Route)
+causality url =
+    let
+        causalityHelper { teamName, pipelineName } resourceName direction versionId =
             \iv ->
                 Causality
                     { id =
@@ -323,22 +347,29 @@ causality =
                     , version = Nothing
                     , groups = []
                     }
-
-        baseRoute dir =
-            map (causalityHelper dir)
-                (pipelineIdentifier
-                    </> s "resources"
-                    </> string
-                    </> s "causality"
-                    </> int
-                )
     in
-    oneOf
-        [ baseRoute Concourse.Upstream
-            </> s "upstream"
-        , baseRoute Concourse.Downstream
-            </> s "downstream"
-        ]
+    pipelineIdentifier url <|
+        \identifier rest ->
+            case rest of
+                [ "resources", resourceName, "causality", versionIdString, directionString ] ->
+                    let
+                        direction =
+                            case directionString of
+                                "upstream" ->
+                                    Just Concourse.Upstream
+
+                                "downstream" ->
+                                    Just Concourse.Downstream
+
+                                _ ->
+                                    Nothing
+                    in
+                    Maybe.map2 (causalityHelper identifier resourceName)
+                        direction
+                        (String.toInt versionIdString)
+
+                _ ->
+                    Nothing
 
 
 
@@ -402,22 +433,23 @@ pipelineRoute p groups =
         }
 
 
-showHighlight : Highlight -> String
+showHighlight : Highlight -> Maybe String
 showHighlight hl =
     case hl of
         HighlightNothing ->
-            ""
+            Nothing
 
         HighlightLine id line ->
-            "#L" ++ id ++ ":" ++ String.fromInt line
+            "L" ++ id ++ ":" ++ String.fromInt line |> Just
 
         HighlightRange id line1 line2 ->
-            "#L"
+            "L"
                 ++ id
                 ++ ":"
                 ++ String.fromInt line1
                 ++ ":"
                 ++ String.fromInt line2
+                |> Just
 
 
 parseHighlight : Maybe String -> Highlight
@@ -455,110 +487,141 @@ parseHighlight hash =
 
 tokenToFlyRoute : String -> Int -> String
 tokenToFlyRoute authToken flyPort =
-    Builder.crossOrigin
-        ("http://127.0.0.1:" ++ String.fromInt flyPort)
-        []
-        [ Builder.string "token" authToken ]
+    "http://127.0.0.1:"
+        ++ String.fromInt flyPort
+        ++ AppUrl.toString
+            { path = []
+            , queryParameters = Dict.singleton "token" [ authToken ]
+            , fragment = Nothing
+            }
 
 
 
 -- router
 
 
-sitemap : Parser ((InstanceVars -> Route) -> a) a
-sitemap =
-    oneOf
+sitemap : AppUrl -> Maybe (InstanceVars -> Route)
+sitemap url =
+    oneOf url
         [ resource
         , job
-        , dashboard
+        , dashboard >> Maybe.map always
         , pipeline
         , build
-        , oneOffBuild
-        , flySuccess
+        , oneOffBuild >> Maybe.map always
+        , flySuccess >> Maybe.map always
         , causality
         ]
 
 
+oneOf : AppUrl -> List (AppUrl -> Maybe a) -> Maybe a
+oneOf url list =
+    case list of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            case first url of
+                Just a ->
+                    Just a
+
+                Nothing ->
+                    oneOf url rest
+
+
 toString : Route -> String
-toString route =
+toString =
+    toUrl >> AppUrl.toString
+
+
+toUrl : Route -> AppUrl
+toUrl route =
     case route of
         Build { id, highlight } ->
-            (pipelineIdBuilder id
-                |> appendPath [ "jobs", id.jobName, "builds", id.buildName ]
-                |> RouteBuilder.build
-            )
-                ++ showHighlight highlight
+            pipelineIdBuilder id
+                { path = [ "jobs", id.jobName, "builds", id.buildName ]
+                , queryParameters = Dict.empty
+                , fragment = showHighlight highlight
+                }
 
         Job { id, page } ->
             pipelineIdBuilder id
-                |> appendPath [ "jobs", id.jobName ]
-                |> appendQuery (Api.Pagination.params page)
-                |> RouteBuilder.build
+                { path = [ "jobs", id.jobName ]
+                , queryParameters = Api.Pagination.params page
+                , fragment = Nothing
+                }
 
         Resource { id, page, version } ->
             pipelineIdBuilder id
-                |> appendPath [ "resources", id.resourceName ]
-                |> appendQuery (Api.Pagination.params page)
-                |> appendQuery (Maybe.withDefault Dict.empty version |> versionQueryParams)
-                |> RouteBuilder.build
+                { path = [ "resources", id.resourceName ]
+                , queryParameters =
+                    Dict.union
+                        (Api.Pagination.params page)
+                        (versionQueryParams (Maybe.withDefault Dict.empty version))
+                , fragment = Nothing
+                }
 
         OneOffBuild { id, highlight } ->
-            (( [ "builds", String.fromInt id ], [] )
-                |> RouteBuilder.build
-            )
-                ++ showHighlight highlight
+            { path = [ "builds", String.fromInt id ]
+            , queryParameters = Dict.empty
+            , fragment = showHighlight highlight
+            }
 
         Pipeline { id, groups } ->
             pipelineIdBuilder id
-                |> appendQuery (groups |> List.map (Builder.string "group"))
-                |> RouteBuilder.build
+                { path = []
+                , queryParameters = Dict.singleton "group" groups
+                , fragment = Nothing
+                }
 
         Dashboard { searchType, dashboardView } ->
-            ( [], [] )
-                |> appendPath
-                    (case searchType of
-                        Normal _ ->
-                            []
+            { path =
+                case searchType of
+                    Normal _ ->
+                        []
 
-                        HighDensity ->
-                            [ "hd" ]
-                    )
-                |> appendQuery
-                    (case searchType of
-                        Normal "" ->
-                            []
+                    HighDensity ->
+                        [ "hd" ]
+            , queryParameters =
+                Dict.fromList
+                    [ ( "search"
+                      , case searchType of
+                            Normal "" ->
+                                []
 
-                        Normal query ->
-                            searchQueryParams query
+                            Normal query ->
+                                [ query ]
 
-                        _ ->
-                            []
-                    )
-                |> appendQuery
-                    (case dashboardView of
-                        ViewNonArchivedPipelines ->
-                            []
+                            _ ->
+                                []
+                      )
+                    , ( "view"
+                      , case dashboardView of
+                            ViewNonArchivedPipelines ->
+                                []
 
-                        _ ->
-                            [ Builder.string "view" <| dashboardViewName dashboardView ]
-                    )
-                |> RouteBuilder.build
+                            _ ->
+                                [ dashboardViewName dashboardView ]
+                      )
+                    ]
+            , fragment = Nothing
+            }
 
         FlySuccess noop flyPort ->
-            ( [ "fly_success" ], [] )
-                |> appendQuery
-                    (flyPort
-                        |> Maybe.map (Builder.int "fly_port")
-                        |> Maybe.Extra.toList
-                    )
-                |> appendQuery
-                    (if noop then
-                        [ Builder.string "noop" "true" ]
+            { path = [ "fly_success" ]
+            , queryParameters =
+                Dict.fromList
+                    [ ( "fly_port", flyPort |> Maybe.map String.fromInt |> Maybe.Extra.toList )
+                    , ( "noop"
+                      , if noop then
+                            [ "true" ]
 
-                     else
-                        []
-                    )
-                |> RouteBuilder.build
+                        else
+                            []
+                      )
+                    ]
+            , fragment = Nothing
+            }
 
         Causality { id, direction } ->
             let
@@ -571,17 +634,22 @@ toString route =
                             "upstream"
             in
             pipelineIdBuilder id
-                |> appendPath [ "resources", id.resourceName ]
-                |> appendPath [ "causality", String.fromInt id.versionID ]
-                |> appendPath [ path ]
-                |> RouteBuilder.build
+                { path = [ "resources", id.resourceName, "causality", String.fromInt id.versionID, path ]
+                , queryParameters = Dict.empty
+                , fragment = Nothing
+                }
 
 
 parsePath : Url.Url -> Maybe Route
-parsePath url =
+parsePath fullUrl =
     let
+        url =
+            AppUrl.fromUrl fullUrl
+
         instanceVars =
-            url.query
+            -- This could be rewritten to use `url.queryParameters` instead,
+            -- but I didn’t feel like touching the `DotNotation` parser.
+            fullUrl.query
                 |> Maybe.withDefault ""
                 |> String.split "&"
                 |> List.filter (\s -> String.startsWith "vars." s || String.startsWith "vars=" s)
@@ -591,7 +659,7 @@ parsePath url =
                 |> Dict.get "vars"
                 |> toDict
     in
-    parse sitemap url |> Maybe.map (\deferredRoute -> deferredRoute instanceVars)
+    sitemap url |> Maybe.map (\deferredRoute -> deferredRoute instanceVars)
 
 
 toDict : Maybe JsonValue -> Dict String JsonValue
@@ -637,20 +705,21 @@ extractQuery route =
             ""
 
 
-searchQueryParams : String -> List Builder.QueryParameter
-searchQueryParams q =
-    [ Builder.string "search" q ]
-
-
-versionQueryParams : Concourse.Version -> List Builder.QueryParameter
+versionQueryParams : Concourse.Version -> QueryParameters
 versionQueryParams version =
-    Concourse.versionQuery version
-        |> List.map (\q -> Builder.string "filter" q)
+    Dict.singleton "filter" (Concourse.versionQuery version)
 
 
-pipelineIdBuilder : { r | teamName : String, pipelineName : String, pipelineInstanceVars : Concourse.InstanceVars } -> RouteBuilder
-pipelineIdBuilder =
-    RouteBuilder.pipeline
+pipelineIdBuilder : { r | teamName : String, pipelineName : String, pipelineInstanceVars : Concourse.InstanceVars } -> AppUrl -> AppUrl
+pipelineIdBuilder id url =
+    let
+        ( path, query ) =
+            RouteBuilder.pipeline id
+    in
+    { path = path ++ url.path
+    , queryParameters = Dict.union url.queryParameters query
+    , fragment = url.fragment
+    }
 
 
 getGroups : Route -> List String

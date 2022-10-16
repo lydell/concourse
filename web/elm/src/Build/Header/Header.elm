@@ -17,6 +17,7 @@ import Concourse
 import Concourse.BuildStatus
 import Concourse.Pagination exposing (Paginated)
 import DateFormat
+import Dict
 import Duration exposing (Duration)
 import EffectTransformer exposing (ET)
 import HoverState
@@ -543,7 +544,7 @@ handleDelivery delivery ( model, effects ) =
                             >> String.endsWith
                                 (Endpoints.BuildEventStream
                                     |> Endpoints.Build model.id
-                                    |> Endpoints.toString []
+                                    |> Endpoints.toString Dict.empty
                                 )
                         )
                     )

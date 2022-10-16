@@ -10,9 +10,10 @@ module Api.Endpoints exposing
     , toString
     )
 
+import AppUrl exposing (QueryParameters)
 import Concourse
+import Dict
 import RouteBuilder exposing (RouteBuilder, append, appendPath, appendQuery)
-import Url.Builder
 
 
 type Endpoint
@@ -91,12 +92,12 @@ type InstanceGroupEndpoint
 
 base : RouteBuilder
 base =
-    ( [ "api", "v1" ], [] )
+    ( [ "api", "v1" ], Dict.empty )
 
 
 baseSky : RouteBuilder
 baseSky =
-    ( [ "sky" ], [] )
+    ( [ "sky" ], Dict.empty )
 
 
 pipeline :
@@ -122,7 +123,7 @@ resource id =
     pipeline id |> appendPath [ "resources", id.resourceName ]
 
 
-toString : List Url.Builder.QueryParameter -> Endpoint -> String
+toString : QueryParameters -> Endpoint -> String
 toString query endpoint =
     builder endpoint
         |> appendQuery query
@@ -215,7 +216,7 @@ pipelineEndpoint endpoint =
 
         PipelineResourcesList ->
             [ "resources" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -233,7 +234,7 @@ jobEndpoint endpoint =
 
         JobBuildsList ->
             [ "builds" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -260,7 +261,7 @@ buildEndpoint endpoint =
 
         SetComment ->
             [ "comment" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -281,7 +282,7 @@ resourceEndpoint endpoint =
 
         PinResourceComment ->
             [ "pin_comment" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -311,7 +312,7 @@ resourceVersionEndpoint endpoint =
 
         UpstreamCasuality ->
             [ "upstream" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -323,7 +324,7 @@ teamEndpoint endpoint =
 
         OrderTeamPipelines ->
             [ "pipelines", "ordering" ]
-    , []
+    , Dict.empty
     )
 
 
@@ -332,5 +333,5 @@ instanceGroupEndpoint endpoint =
     ( case endpoint of
         OrderInstanceGroupPipelines ->
             [ "ordering" ]
-    , []
+    , Dict.empty
     )

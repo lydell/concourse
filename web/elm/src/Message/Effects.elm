@@ -17,6 +17,7 @@ import Browser.Navigation as Navigation
 import Concourse exposing (DatabaseID, encodeJob, encodePipeline, encodeTeam)
 import Concourse.BuildStatus exposing (BuildStatus)
 import Concourse.Pagination exposing (Page)
+import Dict
 import Json.Decode
 import Json.Encode
 import Maybe exposing (Maybe)
@@ -232,7 +233,7 @@ runEffect effect key csrfToken =
             Api.paginatedGet
                 (Endpoints.JobBuildsList |> Endpoints.Job id)
                 (Just page)
-                []
+                Dict.empty
                 Concourse.decodeBuild
                 |> Api.request
                 |> Task.map (\b -> ( page, b ))
@@ -264,7 +265,7 @@ runEffect effect key csrfToken =
             Api.paginatedGet
                 (Endpoints.ResourceVersionsList |> Endpoints.Resource id)
                 (Just page)
-                []
+                Dict.empty
                 Concourse.decodeVersionedResource
                 |> Api.request
                 |> Task.map (\b -> ( page, b ))
@@ -570,7 +571,7 @@ runEffect effect key csrfToken =
             Api.paginatedGet
                 (Endpoints.JobBuildsList |> Endpoints.Job job)
                 page
-                []
+                Dict.empty
                 Concourse.decodeBuild
                 |> Api.request
                 |> Task.attempt BuildHistoryFetched

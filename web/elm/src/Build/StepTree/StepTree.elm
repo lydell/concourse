@@ -52,7 +52,7 @@ import List.Extra
 import Maybe.Extra
 import Message.Effects exposing (Effect(..), toHtmlID)
 import Message.Message exposing (DomID(..), Message(..))
-import Routes exposing (Highlight(..), StepID, showHighlight)
+import Routes exposing (Highlight(..), StepID)
 import StrictEvents
 import Time
 import Tooltip
@@ -508,6 +508,16 @@ setHighlight id line root =
             HighlightLine id line
     in
     ( { root | highlight = hl }, [ ModifyUrl (showHighlight hl) ] )
+
+
+showHighlight : Highlight -> String
+showHighlight hl =
+    case Routes.showHighlight hl of
+        Just string ->
+            "#" ++ string
+
+        Nothing ->
+            ""
 
 
 extendHighlight : StepID -> Int -> StepTreeModel -> ( StepTreeModel, List Effect )

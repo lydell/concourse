@@ -1,5 +1,6 @@
 module Api.Pagination exposing (params, parseLinks, parsePagination)
 
+import AppUrl exposing (QueryParameters)
 import Concourse.Pagination
     exposing
         ( Direction(..)
@@ -21,7 +22,6 @@ import Parser
         , chompWhile
         , getChompedString
         , keyword
-        , map
         , oneOf
         , run
         , spaces
@@ -30,29 +30,26 @@ import Parser
         )
 import String
 import Url
-import Url.Builder
-import Url.Parser exposing (parse, query)
-import Url.Parser.Query as Query
 
 
-params : Maybe Page -> List Url.Builder.QueryParameter
+params : Maybe Page -> QueryParameters
 params p =
     case p of
         Just { direction, limit } ->
             (case direction of
                 From from ->
-                    [ Url.Builder.int "from" from ]
+                    Dict.singleton "from" [ String.fromInt from ]
 
                 To to ->
-                    [ Url.Builder.int "to" to ]
+                    Dict.singleton "to" [ String.fromInt to ]
 
                 ToMostRecent ->
-                    []
+                    Dict.empty
             )
-                ++ [ Url.Builder.int "limit" limit ]
+                |> Dict.insert "limit" [ String.fromInt limit ]
 
         Nothing ->
-            []
+            Dict.empty
 
 
 parsePagination :
@@ -125,17 +122,21 @@ nextRel =
 
 
 parsePage : String -> Maybe Page
-parsePage url =
+parsePage urlString =
     let
         tryParam param =
-            url
+            urlString
                 |> Url.fromString
-                -- for some reason, the `query` function returns parsers that
-                -- only work when the path is empty. This is probably a bug:
-                -- https://github.com/elm/url/issues/17
-                |> Maybe.map (\u -> { u | path = "" })
-                |> Maybe.andThen (parse <| query <| Query.int param)
-                |> Maybe.withDefault Nothing
+                |> Maybe.andThen
+                    (\fullUrl ->
+                        let
+                            url =
+                                AppUrl.fromUrl fullUrl
+                        in
+                        Dict.get param url.queryParameters
+                            |> Maybe.andThen List.head
+                            |> Maybe.andThen String.toInt
+                    )
 
         tryDirection dir =
             tryParam
