@@ -96,16 +96,6 @@ type alias Transition =
 -- pages
 
 
-pipelineIdentifier : AppUrl -> ({ teamName : String, pipelineName : String } -> List String -> Maybe a) -> Maybe a
-pipelineIdentifier url f =
-    case url.path of
-        "teams" :: teamName :: "pipelines" :: pipelineName :: rest ->
-            f { teamName = teamName, pipelineName = pipelineName } rest
-
-        _ ->
-            Nothing
-
-
 pageFromQueryParameters : QueryParameters -> Maybe Pagination.Page
 pageFromQueryParameters queryParameters =
     parsePage
@@ -121,42 +111,26 @@ getIntParameter name queryParameters =
         |> Maybe.andThen String.toInt
 
 
-build : AppUrl -> Maybe (InstanceVars -> Route)
-build url =
-    let
-        buildHelper { teamName, pipelineName } jobName buildName h =
-            \iv ->
-                Build
-                    { id =
-                        { teamName = teamName
-                        , pipelineName = pipelineName
-                        , pipelineInstanceVars = iv
-                        , jobName = jobName
-                        , buildName = buildName
-                        }
-                    , highlight = h
-                    , groups = []
-                    }
-    in
-    pipelineIdentifier url <|
-        \identifier rest ->
-            case rest of
-                [ "jobs", jobName, "builds", buildName ] ->
-                    Just (buildHelper identifier jobName buildName (parseHighlight url.fragment))
-
-                _ ->
-                    Nothing
-
-
-oneOffBuild : AppUrl -> Maybe Route
-oneOffBuild url =
-    case url.path of
-        [ "builds", buildIdString ] ->
-            String.toInt buildIdString
-                |> Maybe.map (\buildId -> OneOffBuild { id = buildId, highlight = parseHighlight url.fragment })
-
-        _ ->
-            Nothing
+build :
+    Maybe String
+    -> Concourse.TeamName
+    -> Concourse.PipelineName
+    -> Concourse.JobName
+    -> Concourse.BuildName
+    -> InstanceVars
+    -> Route
+build fragment teamName pipelineName jobName buildName instanceVars =
+    Build
+        { id =
+            { teamName = teamName
+            , pipelineName = pipelineName
+            , pipelineInstanceVars = instanceVars
+            , jobName = jobName
+            , buildName = buildName
+            }
+        , highlight = parseHighlight fragment
+        , groups = []
+        }
 
 
 parsePage : Maybe Int -> Maybe Int -> Maybe Int -> Maybe Pagination.Page
@@ -178,36 +152,25 @@ parsePage from to limit =
             Nothing
 
 
-resource : AppUrl -> Maybe (InstanceVars -> Route)
-resource url =
-    let
-        resourceHelper { teamName, pipelineName } resourceName page version =
-            \iv ->
-                Resource
-                    { id =
-                        { teamName = teamName
-                        , pipelineName = pipelineName
-                        , pipelineInstanceVars = iv
-                        , resourceName = resourceName
-                        }
-                    , page = page
-                    , version = version
-                    , groups = []
-                    }
-    in
-    pipelineIdentifier url <|
-        \identifier rest ->
-            case rest of
-                [ "resources", resourceName ] ->
-                    resourceHelper
-                        identifier
-                        resourceName
-                        (pageFromQueryParameters url.queryParameters)
-                        (resourceVersion url.queryParameters)
-                        |> Just
-
-                _ ->
-                    Nothing
+resource :
+    QueryParameters
+    -> Concourse.TeamName
+    -> Concourse.PipelineName
+    -> String
+    -> InstanceVars
+    -> Route
+resource queryParameters teamName pipelineName resourceName instanceVars =
+    Resource
+        { id =
+            { teamName = teamName
+            , pipelineName = pipelineName
+            , pipelineInstanceVars = instanceVars
+            , resourceName = resourceName
+            }
+        , page = pageFromQueryParameters queryParameters
+        , version = resourceVersion queryParameters
+        , groups = []
+        }
 
 
 resourceVersion : QueryParameters -> Maybe Concourse.Version
@@ -234,79 +197,49 @@ resourceVersion queryParameters =
     Dict.get "filter" queryParameters |> Maybe.andThen clean
 
 
-job : AppUrl -> Maybe (InstanceVars -> Route)
-job url =
-    let
-        jobHelper { teamName, pipelineName } jobName page =
-            \iv ->
-                Job
-                    { id =
-                        { teamName = teamName
-                        , pipelineName = pipelineName
-                        , pipelineInstanceVars = iv
-                        , jobName = jobName
-                        }
-                    , page = page
-                    , groups = []
-                    }
-    in
-    pipelineIdentifier url <|
-        \identifier rest ->
-            case rest of
-                [ "jobs", jobName ] ->
-                    Just (jobHelper identifier jobName (pageFromQueryParameters url.queryParameters))
-
-                _ ->
-                    Nothing
+job :
+    QueryParameters
+    -> Concourse.TeamName
+    -> Concourse.PipelineName
+    -> Concourse.JobName
+    -> InstanceVars
+    -> Route
+job queryParameters teamName pipelineName jobName instanceVars =
+    Job
+        { id =
+            { teamName = teamName
+            , pipelineName = pipelineName
+            , pipelineInstanceVars = instanceVars
+            , jobName = jobName
+            }
+        , page = pageFromQueryParameters queryParameters
+        , groups = []
+        }
 
 
-pipeline : AppUrl -> Maybe (InstanceVars -> Route)
-pipeline url =
-    let
-        pipelineHelper { teamName, pipelineName } g =
-            \iv ->
-                Pipeline
-                    { id =
-                        { teamName = teamName
-                        , pipelineName = pipelineName
-                        , pipelineInstanceVars = iv
-                        }
-                    , groups = g
-                    }
-    in
-    pipelineIdentifier url <|
-        \identifier rest ->
-            case rest of
-                [] ->
-                    Just (pipelineHelper identifier (Dict.get "group" url.queryParameters |> Maybe.withDefault []))
-
-                _ ->
-                    Nothing
+pipeline :
+    QueryParameters
+    -> Concourse.TeamName
+    -> Concourse.PipelineName
+    -> InstanceVars
+    -> Route
+pipeline queryParameters teamName pipelineName instanceVars =
+    Pipeline
+        { id =
+            { teamName = teamName
+            , pipelineName = pipelineName
+            , pipelineInstanceVars = instanceVars
+            }
+        , groups = Dict.get "group" queryParameters |> Maybe.withDefault []
+        }
 
 
-dashboard : AppUrl -> Maybe Route
-dashboard url =
-    let
-        dashboardHelper searchType =
-            Dashboard
-                { searchType = searchType
-                , dashboardView = dashboardViewQuery url.queryParameters
-                }
-    in
-    case url.path of
-        [] ->
-            Dict.get "search" url.queryParameters
-                |> Maybe.andThen List.head
-                |> Maybe.withDefault ""
-                |> Normal
-                |> dashboardHelper
-                |> Just
-
-        [ "hd" ] ->
-            Just (dashboardHelper HighDensity)
-
-        _ ->
-            Nothing
+dashboard : QueryParameters -> SearchType -> Route
+dashboard queryParameters searchType =
+    Dashboard
+        { searchType = searchType
+        , dashboardView = dashboardViewQuery queryParameters
+        }
 
 
 dashboardViewQuery : QueryParameters -> DashboardView
@@ -317,59 +250,34 @@ dashboardViewQuery queryParameters =
         |> Maybe.withDefault ViewNonArchivedPipelines
 
 
-flySuccess : AppUrl -> Maybe Route
-flySuccess url =
-    case url.path of
-        [ "fly_success" ] ->
-            FlySuccess
-                (Dict.get "noop" url.queryParameters |> Maybe.andThen List.head |> (==) (Just "true"))
-                (getIntParameter "fly_port" url.queryParameters)
-                |> Just
-
-        _ ->
-            Nothing
+flySuccess : QueryParameters -> Route
+flySuccess queryParameters =
+    FlySuccess
+        (Dict.get "noop" queryParameters |> Maybe.andThen List.head |> (==) (Just "true"))
+        (getIntParameter "fly_port" queryParameters)
 
 
-causality : AppUrl -> Maybe (InstanceVars -> Route)
-causality url =
-    let
-        causalityHelper { teamName, pipelineName } resourceName direction versionId =
-            \iv ->
-                Causality
-                    { id =
-                        { teamName = teamName
-                        , pipelineName = pipelineName
-                        , pipelineInstanceVars = iv
-                        , resourceName = resourceName
-                        , versionID = versionId
-                        }
-                    , direction = direction
-                    , version = Nothing
-                    , groups = []
-                    }
-    in
-    pipelineIdentifier url <|
-        \identifier rest ->
-            case rest of
-                [ "resources", resourceName, "causality", versionIdString, directionString ] ->
-                    let
-                        direction =
-                            case directionString of
-                                "upstream" ->
-                                    Just Concourse.Upstream
-
-                                "downstream" ->
-                                    Just Concourse.Downstream
-
-                                _ ->
-                                    Nothing
-                    in
-                    Maybe.map2 (causalityHelper identifier resourceName)
-                        direction
-                        (String.toInt versionIdString)
-
-                _ ->
-                    Nothing
+causality :
+    Concourse.TeamName
+    -> Concourse.PipelineName
+    -> String
+    -> Concourse.CausalityDirection
+    -> InstanceVars
+    -> Int
+    -> Route
+causality teamName pipelineName resourceName direction instanceVars versionId =
+    Causality
+        { id =
+            { teamName = teamName
+            , pipelineName = pipelineName
+            , pipelineInstanceVars = instanceVars
+            , resourceName = resourceName
+            , versionID = versionId
+            }
+        , direction = direction
+        , version = Nothing
+        , groups = []
+        }
 
 
 
@@ -498,35 +406,6 @@ tokenToFlyRoute authToken flyPort =
 
 
 -- router
-
-
-sitemap : AppUrl -> Maybe (InstanceVars -> Route)
-sitemap url =
-    oneOf url
-        [ resource
-        , job
-        , dashboard >> Maybe.map always
-        , pipeline
-        , build
-        , oneOffBuild >> Maybe.map always
-        , flySuccess >> Maybe.map always
-        , causality
-        ]
-
-
-oneOf : AppUrl -> List (AppUrl -> Maybe a) -> Maybe a
-oneOf url list =
-    case list of
-        [] ->
-            Nothing
-
-        first :: rest ->
-            case first url of
-                Just a ->
-                    Just a
-
-                Nothing ->
-                    oneOf url rest
 
 
 toString : Route -> String
@@ -659,7 +538,47 @@ parsePath fullUrl =
                 |> Dict.get "vars"
                 |> toDict
     in
-    sitemap url |> Maybe.map (\deferredRoute -> deferredRoute instanceVars)
+    case url.path of
+        [] ->
+            Dict.get "search" url.queryParameters
+                |> Maybe.andThen List.head
+                |> Maybe.withDefault ""
+                |> Normal
+                |> dashboard url.queryParameters
+                |> Just
+
+        [ "hd" ] ->
+            Just (dashboard url.queryParameters HighDensity)
+
+        [ "fly_success" ] ->
+            Just (flySuccess url.queryParameters)
+
+        [ "builds", buildIdString ] ->
+            String.toInt buildIdString
+                |> Maybe.map (\buildId -> OneOffBuild { id = buildId, highlight = parseHighlight url.fragment })
+
+        [ "teams", teamName, "pipelines", pipelineName ] ->
+            Just (pipeline url.queryParameters teamName pipelineName instanceVars)
+
+        [ "teams", teamName, "pipelines", pipelineName, "resources", resourceName ] ->
+            Just (resource url.queryParameters teamName pipelineName resourceName instanceVars)
+
+        [ "teams", teamName, "pipelines", pipelineName, "resources", resourceName, "causality", versionIdString, "upstream" ] ->
+            String.toInt versionIdString
+                |> Maybe.map (causality teamName pipelineName resourceName Concourse.Upstream instanceVars)
+
+        [ "teams", teamName, "pipelines", pipelineName, "resources", resourceName, "causality", versionIdString, "downstream" ] ->
+            String.toInt versionIdString
+                |> Maybe.map (causality teamName pipelineName resourceName Concourse.Downstream instanceVars)
+
+        [ "teams", teamName, "pipelines", pipelineName, "jobs", jobName ] ->
+            Just (job url.queryParameters teamName pipelineName jobName instanceVars)
+
+        [ "teams", teamName, "pipelines", pipelineName, "jobs", jobName, "builds", buildName ] ->
+            Just (build url.fragment teamName pipelineName jobName buildName instanceVars)
+
+        _ ->
+            Nothing
 
 
 toDict : Maybe JsonValue -> Dict String JsonValue
