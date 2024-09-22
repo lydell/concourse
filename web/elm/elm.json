@@ -25,7 +25,7 @@
             "fapian/elm-html-aria": "1.4.0",
             "krisajenkins/remotedata": "5.0.0",
             "matthewsj/elm-ordering": "2.0.0",
-            "ryannhg/date-format": "2.3.0",
+            "ryan-haskell/date-format": "1.0.0",
             "truqu/elm-base64": "2.0.4",
             "vito/elm-ansi": "10.0.1"
         },
